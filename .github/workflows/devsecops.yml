@@ -20,15 +20,18 @@ jobs:
 
     - name: Install dependencies
       run: |
+        cd exercice3
         pip install -r requirements.txt
 
     - name: Run Bandit (SAST)
       run: |
-        # Analyse le code (ignore les erreurs connues grâce à nosec)
+        cd exercice3
+        # Analyse le code en ignorant les erreurs connues (nosec)
         bandit -r app_secure.py -f custom
 
     - name: Run Safety (SCA)
       run: |
+        cd exercice3
         safety check --full-report
 
   build-docker:
@@ -40,5 +43,6 @@ jobs:
     
     - name: Build Docker Image
       run: |
+        cd exercice3
         docker build -t my-secure-app .
         echo "Image Docker construite avec succès"
