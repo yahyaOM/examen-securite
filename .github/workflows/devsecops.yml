@@ -1,0 +1,40 @@
+name: DevSecOps Pipeline
+
+on: [push]
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Récupération du code
+        uses: actions/checkout@v3
+
+      - name: Installation de Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Installation des dépendances
+        run: |
+          pip install -r requirements.txt
+
+      - name: 1. Analyse Statique du Code (Bandit)
+        # Échoue si une faille High/Medium est trouvée
+        run: bandit -r . -f custom
+
+      - name: 2. Analyse des Dépendances (Safety)
+        run: safety check
+
+      - name: Construction de l'image Docker
+        run: docker build -t mon-app-securisee .
+
+      - name: 3. Scan de l'image Docker (Trivy)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'mon-app-securisee'
+          format: 'table'
+          exit-code: '1' # Fait échouer la pipeline si failles critiques
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
