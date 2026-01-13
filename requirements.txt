@@ -1,5 +1,0 @@
-flask
-werkzeug
-# Outils de sécurité pour la pipeline
-bandit
-safety
