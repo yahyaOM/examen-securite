@@ -1,41 +1,55 @@
-import os
+from flask import Flask, request
+import sqlite3
 import subprocess
 import hashlib
-from flask import Flask, request, render_template_string
+import os
+import bcrypt  # Added for secure hashing
 
 app = Flask(__name__)
+# In a real app, use environment variables, not hardcoded strings
+SECRET_KEY = os.environ.get("SECRET_KEY", "secure-fallback-key")
 
-app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'default-key-for-dev')
-ADMIN_HASH = os.environ.get('ADMIN_HASH', '8d969eef6ecad3c29a3a629280e686cf0c3f5d5a86aff3ca12020c923adc6c92')
-
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
-
-@app.route("/login")
+@app.route("/login", methods=["POST"])
 def login():
-    username = request.args.get("username")
-    password = request.args.get("password")
-    if not username or not password:
-        return "Missing credentials", 400
+    username = request.json.get("username")
+    password = request.json.get("password")
+    conn = sqlite3.connect("users.db")
+    cursor = conn.cursor()
+    # FIXED: Using parameterized query to prevent SQL Injection
+    query = "SELECT password FROM users WHERE username=?"
+    cursor.execute(query, (username,))
+    result = cursor.fetchone()
     
-    if username == "admin" and hash_password(password) == ADMIN_HASH:
-        return "Logged in (Securely)"
-    return "Invalid credentials", 403
+    if result and bcrypt.checkpw(password.encode(), result[0]):
+        return {"status": "success", "user": username}
+    return {"status": "error", "message": "Invalid credentials"}
 
-@app.route("/ping")
+@app.route("/ping", methods=["POST"])
 def ping():
-    host = request.args.get("host", "localhost")
+    host = request.json.get("host", "")
+    # FIXED: Simple validation (only allowing alphanumeric/dots)
     if not all(c.isalnum() or c == '.' for c in host):
-        return "Invalid host format", 400
+        return {"error": "Invalid host format"}, 400
+    
+    # FIXED: Passing host as an argument rather than shell string
+    process = subprocess.run(["ping", "-c", "1", host], capture_output=True, text=True)
+    return {"output": process.stdout}
 
-    cmd = ["ping", "-c", "1", host] if os.name != 'nt' else ["ping", "-n", "1", host]
-    try:
-        # nosec permet d'ignorer l'avertissement B603 de Bandit
-        subprocess.run(cmd, capture_output=True, shell=False, timeout=5) # nosec
-        return "Ping successful"
-    except Exception:
-        return "Ping error"
+@app.route("/compute", methods=["POST"])
+def compute():
+    # FIXED: Removed eval(). Using a safe alternative or simple logic
+    return {"message": "Direct expression evaluation is disabled for security."}
+
+@app.route("/hash", methods=["POST"])
+def hash_password():
+    pwd = request.json.get("password", "admin")
+    # FIXED: Using bcrypt instead of MD5
+    hashed = bcrypt.hashpw(pwd.encode(), bcrypt.gensalt())
+    return {"hash": hashed.decode()}
+
+@app.route("/hello", methods=["GET"])
+def hello():
+    return {"message": "Welcome to the Secured DevSecOps API"}
 
 if __name__ == "__main__":
-    # nosec permet d'ignorer l'avertissement B104 (binding 0.0.0.0)
-    app.run(host='0.0.0.0', port=5000, debug=False) # nosec
+    app.run(host="0.0.0.0", port=5000)
